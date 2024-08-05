@@ -7,6 +7,7 @@ class Grid():
         self.mines = mines
 
         self.grid = None
+        self.player_grid = None
 
     def generate_mines(self):
         self.mine_positions = []
@@ -38,6 +39,7 @@ class Grid():
         self.grid = [[0 for _ in range(self.width)] for _ in range(self.height)]
         self.generate_mines()
         self.generate_numbers()
+        self.player_grid = [[0 for _ in range(self.width)] for _ in range(self.height)]
     
     def get_cell(self, x, y):
         return self.grid[y][x]
@@ -53,6 +55,12 @@ class Grid():
                 else:
                     print(self.grid[y][x], end=" ")
             print()
+
+    def place_sign(self, n, position):
+        x = int(position.x // 2)
+        y = int(position.z // 2)
+        self.player_grid[y][x] = n
+
     
 if __name__ == "__main__":
     grid = Grid(mines=20)
