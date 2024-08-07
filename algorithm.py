@@ -23,8 +23,6 @@ class Grid():
     def generate_numbers(self):
         for y in range(self.height):
             for x in range(self.width):
-                if self.grid[y][x] == -1:
-                    continue
                 count = 0
                 for dy in [-1, 0, 1]:
                     for dx in [-1, 0, 1]:
@@ -33,16 +31,23 @@ class Grid():
                         if 0 <= y + dy < self.height and 0 <= x + dx < self.width:
                             if self.grid[y + dy][x + dx] == -1:
                                 count += 1
+                self.known_grid[y][x] = count
+                if self.grid[y][x] == -1:
+                    continue
                 self.grid[y][x] = count
     
     def new(self):
         self.grid = [[0 for _ in range(self.width)] for _ in range(self.height)]
         self.generate_mines()
+        self.known_grid = [[0 for _ in range(self.width)] for _ in range(self.height)]
         self.generate_numbers()
         self.player_grid = [[0 for _ in range(self.width)] for _ in range(self.height)]
     
     def get_cell(self, x, y):
         return self.grid[y][x]
+    
+    def get_known_cell(self, x, y):
+        return self.known_grid[y][x]
     
     def is_mine(self, x, y):
         return self.grid[y][x] == -1
