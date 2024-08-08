@@ -14,12 +14,55 @@ explosion = Audio('sfx/explosion.wav', loop=False, autoplay=False)
 
 grid = Grid(mines=20)
 grid.new()
+grid.print_grid()
 
 player = FirstPersonController()
 player.cast_shadows = True
-# player.gravity = 0
+
 player.position = (1, 1, 1)
 player.cursor.visible = False
+
+camera.ui.enabled = True
+
+mouse.locked = True
+mouse.visible = False
+
+menu = Entity(model='quad', color=color.dark_gray, scale=(1, 0.5), parent=camera.ui, enabled=False)
+title = Text(text='Minesweeper 3D', scale=(1, 2), y=0.3, x=-0.1, color=color.white, parent=menu)
+continue_button = Button(text='Continue', scale=(0.2, 0.1), parent=menu, y=0.1, color=color.white, text_color=color.black)
+exit_button = Button(text='Exit', scale=(0.2, 0.1), parent=menu, y=-0.1, color=color.white, text_color=color.black)
+
+def close():
+    menu.enabled = False
+    mouse.locked = True
+    mouse.visible = False
+continue_button.on_click = close
+exit_button.on_click = application.quit
+
+menu_lost = Entity(model='quad', color=color.dark_gray, scale=(1, 0.5), parent=camera.ui, enabled=False)
+title = Text(text='Minesweeper 3D', scale=(1, 2), y=0.3, x=-0.1, color=color.white, parent=menu_lost)
+subtitle = Text(text='Game Over', scale=(0.5, 0.5), y=0.1, x=-0.1, color=color.white, parent=menu_lost)
+restart_button = Button(text='Restart', scale=(0.2, 0.1), parent=menu_lost, y=0.1, color=color.white, text_color=color.black)
+exit_button = Button(text='Exit', scale=(0.2, 0.1), parent=menu_lost, y=-0.1, color=color.white, text_color=color.black)
+
+def restart():
+    global signs, help_grid
+    grid.new()
+    grid.print_grid()
+    menu_lost.enabled = False
+    mouse.locked = True
+    mouse.visible = False
+    player.position = (1, 1, 1)
+    player.rotation = (0, 0, 0)
+    for sign in signs:
+        for item in sign:
+            destroy(item)
+    signs = [[0 for _ in range(grid.width)] for _ in range(grid.height)]
+    for item in help_grid:
+        item.visible = False
+
+restart_button.on_click = restart
+exit_button.on_click = application.quit
 
 light = DirectionalLight()
 light.rotation = Vec3(45, 45, 0)
@@ -85,8 +128,13 @@ for y in range(grid.height//2):
 def input(key):
     global sign_around
     if key == 'escape':
-        application.quit()
-    elif key == 'h':
+        menu.enabled = not menu.enabled
+        mouse.locked = not mouse.locked
+        mouse.visible = not mouse.visible
+
+    if menu.enabled: return
+
+    if key == 'h':
         for item in help_grid:
             item.visible = not item.visible
     elif key == 'm':
@@ -108,7 +156,7 @@ hammer_sign = None
 def update():
     global currentSign, sign_around, last_played, hammer, hammer_sign, hammer_animation_playing, hammer_animation_direction, hammer_animation_stage
     start = player.position + Vec3(0, 1.5, 0)
-    hit = raycast(start, camera.forward, ignore=help_grid+[player])
+    hit = raycast(start, camera.forward, ignore=help_grid+[player], distance=5)
 
     if hit.hit:
         hit_pos = hit.entity.position
@@ -129,15 +177,20 @@ def update():
             currentSign = {"n": None, "entity": None}
 
     if held_keys['1']:
+        if menu.enabled: return
         sign_around = 1 if not metal_detector.visible else None
     if held_keys['2']:
+        if menu.enabled: return
         sign_around = 2 if not metal_detector.visible else None
     if held_keys['3']:
+        if menu.enabled: return
         sign_around = 3 if not metal_detector.visible else None
     if held_keys['4']:
+        if menu.enabled: return
         sign_around = 4 if not metal_detector.visible else None
 
     if held_keys['left mouse'] and hit.hit and currentSign['n']:
+        if menu.enabled: return
         sign = Entity(
             model=currentSign['entity'].model,
             position=hit.entity.position + Vec3(0, 1.2, 0),
@@ -158,14 +211,8 @@ def update():
 
         destroy(currentSign['entity'])
         currentSign = {"n": None, "entity": None}
-
-        if grid.get_cell(int(hit.entity.position.x // 2), int(hit.entity.position.z // 2)) == -1:
-            print("Game Over")
-            explosion.play()
-            # application.quit()
     
     if hammer_animation_playing:
-        print(hammer.rotation_z, hammer_animation_stage, hammer_animation_direction)
         hammer.rotation_z += -1 * hammer_animation_direction
         if hammer_animation_direction == -1 and hammer.rotation_z >= -30:
             hammer_animation_direction = 1
@@ -175,8 +222,10 @@ def update():
                 hammer_animation_playing = False
                 hammer_animation_stage = 1
                 hammer.rotation_z = -30
-                hammer_sign = None
                 hammer.visible = False
+                hammer_sign.collider = None
+                hammer_sign = None
+
                 return
         
         if hammer_animation_stage == 1:
@@ -194,10 +243,18 @@ def update():
         while hammer.intersects(hammer_sign).hit:
             hammer_sign.position = hammer_sign.position - Vec3(0, 0.001, 0)
             hammer.position = hammer.position + Vec3(0, 0.001, 0)
-            print(hammer_sign.position, hammer.intersects(hammer_sign).hit)
+
+            if hammer_animation_stage == 3:
+                if grid.get_cell(int(hammer_sign.position.x // 2), int(hammer_sign.position.z // 2)) == -1:
+                    print("Game Over")
+                    explosion.play()
+                    menu_lost.enabled = True
+                    mouse.locked = False
+                    mouse.visible = True
 
 
     if held_keys['r'] and hit.hit and player_grid[int(hit_pos.z // 2)][int(hit_pos.x // 2)] != 0:
+        if menu.enabled: return
         grid.remove_sign(int(hit_pos.x // 2), int(hit_pos.z // 2))
         destroy(signs[int(hit_pos.z // 2)][int(hit_pos.x // 2)])
         currentSign = {"n": None, "entity": None}
