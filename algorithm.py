@@ -65,6 +65,9 @@ class Grid():
         x = int(position.x // 2)
         y = int(position.z // 2)
         self.player_grid[y][x] = n
+    
+    def remove_sign(self, x, y):
+        self.player_grid[y][x] = 0
 
     
 if __name__ == "__main__":

@@ -1,10 +1,16 @@
 from ursina import *
 from ursina.prefabs.first_person_controller import FirstPersonController
 from ursina.lights import DirectionalLight
+from datetime import datetime
 
 from algorithm import Grid
 
 app = Ursina()
+
+beep = Audio('sfx/beep.wav', loop=False, autoplay=False)
+explosion = Audio('sfx/explosion.wav', loop=False, autoplay=False)
+
+# hammer = Entity(model='models/hammer.glb', position=(0, 2, 5), scale=0.4, collider='box')
 
 grid = Grid(mines=20)
 grid.new()
@@ -89,16 +95,25 @@ def input(key):
 
 sign_around = 1
 currentSign = {"n": None, "entity": None}
+signs = [[0 for _ in range(grid.width)] for _ in range(grid.height)]
+
+beeps = 3
+last_played = datetime.now().timestamp()
+
+hammer_animation_playing = False
+hammer_animation_direction = 1
+hammer_animation_stage = 1
+hammer_sign = None
 
 def update():
-    global currentSign, sign_around
+    global currentSign, sign_around, last_played, hammer, hammer_sign, hammer_animation_playing, hammer_animation_direction, hammer_animation_stage
     start = player.position + Vec3(0, 1.5, 0)
     hit = raycast(start, camera.forward, ignore=help_grid+[player])
 
     if hit.hit:
         hit_pos = hit.entity.position
         player_grid = grid.player_grid
-        if player_grid[int(hit_pos.z // 2)][int(hit_pos.x // 2)] == 0:
+        if player_grid[int(hit_pos.z // 2)][int(hit_pos.x // 2)] == 0 and not hammer_animation_playing:
             pos = hit.entity.position + Vec3(0, 1.5, 0)
             if not currentSign['entity'] or currentSign['entity'].position != pos or currentSign['n'] != sign_around:
                 rotation = currentSign['entity'].rotation if currentSign['entity'] else (0, 0, 0)
@@ -125,25 +140,79 @@ def update():
     if held_keys['left mouse'] and hit.hit and currentSign['n']:
         sign = Entity(
             model=currentSign['entity'].model,
-            position=hit.entity.position + Vec3(0, 1, 0),
+            position=hit.entity.position + Vec3(0, 1.2, 0),
             rotation=currentSign['entity'].rotation,
             scale=currentSign['entity'].scale,
-            cast_shadows=True
+            cast_shadows=True,
+            collider='box'
         )
+        hammer = Entity(model='models/hammer.glb', position=(1.5, 2.5, 0), scale=1, rotation=(0, 0, -30), collider='box', parent=sign)
+        signs[int(hit.entity.position.z // 2)][int(hit.entity.position.x // 2)] = sign
+        hammer_sign = sign
+        hammer_animation_playing = True
+        hammer_animation_direction = 1
+
         print(grid.get_cell(int(hit.entity.position.x // 2), int(hit.entity.position.z // 2)))
-        if grid.get_cell(int(hit.entity.position.x // 2), int(hit.entity.position.z // 2)) == -1:
-            print("Game Over")
-            application.quit()
+
         grid.place_sign(currentSign['n'], currentSign['entity'].position)
 
         destroy(currentSign['entity'])
         currentSign = {"n": None, "entity": None}
 
+        if grid.get_cell(int(hit.entity.position.x // 2), int(hit.entity.position.z // 2)) == -1:
+            print("Game Over")
+            explosion.play()
+            # application.quit()
+    
+    if hammer_animation_playing:
+        print(hammer.rotation_z, hammer_animation_stage, hammer_animation_direction)
+        hammer.rotation_z += -1 * hammer_animation_direction
+        if hammer_animation_direction == -1 and hammer.rotation_z >= -30:
+            hammer_animation_direction = 1
+            hammer_animation_stage += 1
+
+            if hammer_animation_stage == 4:
+                hammer_animation_playing = False
+                hammer_animation_stage = 1
+                hammer.rotation_z = -30
+                hammer_sign = None
+                hammer.visible = False
+                return
+        
+        if hammer_animation_stage == 1:
+            if hammer.rotation_z <= -67:
+                hammer_animation_direction = -1
+        
+        if hammer_animation_stage == 2:
+            if hammer.rotation_z <= -72:
+                hammer_animation_direction = -1
+        
+        if hammer_animation_stage == 3:
+            if hammer.rotation_z <= -78:
+                hammer_animation_direction = -1
+
+        while hammer.intersects(hammer_sign).hit:
+            hammer_sign.position = hammer_sign.position - Vec3(0, 0.001, 0)
+            hammer.position = hammer.position + Vec3(0, 0.001, 0)
+            print(hammer_sign.position, hammer.intersects(hammer_sign).hit)
+
+
+    if held_keys['r'] and hit.hit and player_grid[int(hit_pos.z // 2)][int(hit_pos.x // 2)] != 0:
+        grid.remove_sign(int(hit_pos.x // 2), int(hit_pos.z // 2))
+        destroy(signs[int(hit_pos.z // 2)][int(hit_pos.x // 2)])
+        currentSign = {"n": None, "entity": None}
+
     if metal_detector.visible:
         scan_pos = metal_detector.world_position
+        if scan_pos.x < 0 or scan_pos.z < 0 or scan_pos.x > grid.width*2 or scan_pos.z > grid.height*2: return
         cell = grid.get_known_cell(round(scan_pos.x / 2), round(scan_pos.z / 2))
         angle = 45 if cell == 1 else 72 if cell == 2 else 100 if cell == 3 else 145 if cell == 4 else 0
         angle += random.randint(-2, 2) if cell else 0
         metal_detector_arrow.rotation_y = angle
+        if cell not in [-1, 0]:
+            interval = 1 if cell == 1 else 0.75 if cell == 2 else 0.5 if cell == 3 else 0.25
+            if not last_played or datetime.now().timestamp() - last_played > interval:
+                beep.play()
+                last_played = datetime.now().timestamp()
 
 app.run()
